@@ -11,7 +11,15 @@
  * It seems that a higher amount to steal may not be good if the guys have to
  * spend a lot od\f time to deposit money (the account is always empty)
  */
+
+/*
+ * TODO:
+ * allow different number of stealer and moneyguy
+ */
+
 #include <stdlib.h>
+#include <getopt.h>
+#include <string.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -19,16 +27,19 @@
 #include <errno.h>
 #include <assert.h>
 
-/* number of stealer */
-#define NOSTEALER 5
 /* stealer maximum trial */
 #define MAXTRIAL 100
-/* deposit time interval */
-#define DEPINTERVAL 80000
-/* time for saving money */
-#define SAVINTERVAL 10000
+
+/* number of stealer of moneyguy */
+static int stealer_num = 5;
+static int moneyguy_num = 5; /*currently this is not supported */
 /* time for punishing unsucessful steal */
-#define PUNINTERVAL 20000
+static int punish_time = 80000;
+/* time for saving money */
+static int save_time = 10000;
+/* deposit time interval */
+static int deposit_time = 20000;
+
 
 /*
  * notify format the message with the name of given as first argument by the
@@ -58,6 +69,32 @@ static void save(int givenamount, int *place);
 static void deposit(char *name, int amount, struct account *acc);
 static void steal(char *name, int amount, struct account *acc);
 static void adv_sleep(int nanosec);
+static void opt_set(int *var, char *name);
+
+static void usage(void)
+{
+        printf("./stealer --stealer=n --punish-time=n\n");
+        printf("See README for more prarameters\n");
+}
+static void exit_error(char *msg)
+{
+        fputs(msg, stderr);
+        usage();
+        exit(EXIT_FAILURE);
+}
+
+static void opt_set(int *var, char *name)
+{
+        char *endptr;
+        if (optarg != NULL)
+                *var = strtol(optarg, &endptr, 10);
+        if (!endptr || *endptr != '\0' || !optarg){
+                /* variable length array, require C99 */
+                char msg[strlen("invalid \n") + strlen(name) + 1];
+                snprintf(msg, sizeof(msg), "invalid %s\n", name);
+                exit_error(msg);
+        }
+}
 
 static struct account acc1 =
 {
@@ -80,14 +117,54 @@ void check(int ret, char *mesg)
         }
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
-        pthread_t steallist[NOSTEALER];
-        pthread_t mguylist[NOSTEALER];
-        int amountlist[NOSTEALER][2];
+        while (1){
+                int c;
+                static struct option long_options[] =
+                {
+                        {"stealer", optional_argument, NULL, 's'},
+                        {"moneyguy", optional_argument, NULL, 'm'},
+                        {"punish-time", optional_argument, NULL, 'p'},
+                        {"save-time", optional_argument, NULL, 'a'},
+                        {"deposite-time", optional_argument, NULL, 'd'},
+                        {0, 0, 0, 0}
+                };
+
+                int option_index = 0;
+                c = getopt_long(argc, argv, "s:m:p:a:d:",
+                                long_options, &option_index);
+                
+                if (c == -1)
+                        break;
+                switch (c){
+                        case 's':
+                                opt_set(&stealer_num, "stealer");
+                                break;
+                        case 'm':
+                                opt_set(&moneyguy_num, "moneyguy");
+                                break;
+                        case 'p':
+                                opt_set(&punish_time, "punish-time");
+                                break;
+                        case 'a':
+                                opt_set(&save_time, "save-time");
+                                break;
+                        case 'd':
+                                opt_set(&deposit_time, "deposit-time");
+                                break;
+                        default:
+                                exit_error("invalid option\n");
+                }
+        }
+
+
+        pthread_t steallist[stealer_num];
+        pthread_t mguylist[stealer_num];
+        int amountlist[stealer_num][2];
         int ret;
         
-        for (int i=0; i < NOSTEALER; i++){
+        for (int i=0; i < stealer_num; i++){
                 amountlist[i][0] = i + 1;
                 ret = pthread_create(&steallist[i], NULL, stealer, &amountlist[i][0]);
                 check(ret, "pthread_create");
@@ -95,7 +172,7 @@ int main(void)
                 check(ret, "pthread_create");
         }
 
-        for (int i=0; i < NOSTEALER; i++){
+        for (int i=0; i < stealer_num; i++){
                 int *stolen;
                 pthread_join(steallist[i], (void**) &stolen);
                 amountlist[i][1] = *stolen;
@@ -103,20 +180,31 @@ int main(void)
                 check(ret, "pthread_join");
                 printf("joined stealer %d\n\n", i+1);
         }
+
+        /* some folks say that the mutex and condition variable need to be
+         * destroyed (see Uderstanding and Using C Pointers, Page 188),
+         * however, this guy
+         * (http://www2.chrishardick.com:1099/Notes/Computing/C/pthreads/mutexes.html)
+         * say it does not need to, for a statically allocated one.
+         */
+
         fputs("\n========================\n"
               "main: all stealer joined\n"
               "========================\n\n",
               stdout);
 
-        for (int i=0; i < NOSTEALER; i++){
+        for (int i=0; i < stealer_num; i++){
                 pthread_cancel(mguylist[i]);
                 check(ret, "pthread_join");
         }
-        fputs("\n========================\n"
+
+        fputs("\n=========================\n"
               "main: all moneyguy killed\n"
-              "========================\n\n",
+              "=========================\n\n",
               stdout);
-        for (int i=0; i < NOSTEALER; i++){
+
+        pthread_mutex_destroy(&acc1.mutex);
+        for (int i=0; i < stealer_num; i++){
                 printf("stealer %d stolen %d\n", i+1, amountlist[i][1]);
         }
 }
@@ -124,10 +212,12 @@ int main(void)
 static void adv_sleep(int usec)
 {
         /*
-         * usleep is depracated by linux, but nanosleep is a bit clumpsy
+         * usleep is depracated by linux, but nanosleep is a bit clumpsy.
          * here implement usleep interface by nanosleep . nanosleep accept
          * long, but it cannot prevent passing in a signed value, because the
          * compiler perform implict type conversion. So, assert
+         *
+         * From the man page, nanosleep only sleep a thread.
          */
 
         assert(usec >= 0);
@@ -188,20 +278,20 @@ static void *moneyguy(void *amountptr)
 
                 deposit(name, amount, &acc1);
                 pthread_mutex_unlock(&acc1.mutex);
-                adv_sleep(DEPINTERVAL * random() / RAND_MAX);
+                adv_sleep(deposit_time * (double) random() / RAND_MAX);
                 sleep(0.1 * ((double) random()) / RAND_MAX);
         }
 }
 
 static void punish(int amount)
 {
-        adv_sleep(PUNINTERVAL * random() / RAND_MAX);
+        adv_sleep(punish_time * random() / RAND_MAX);
 }
 
 static void save(int givenamount, int *place)
 {
         *place += givenamount;
-        adv_sleep(SAVINTERVAL * random() / RAND_MAX);
+        adv_sleep(save_time * random() / RAND_MAX);
 }
 static void steal(char *name, int amount, struct account *acc)
 {
