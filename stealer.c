@@ -1,22 +1,3 @@
-/*
- * There are some ATM cracked by aome stealer. some guy are crazily depositing
- * money into the account.
- * With some reason, the ATM cannot tell how much $ left. The stealer each own 1
- * ATM, and the have to decide a fixed amount to retrieve from the machine for a
- * maximum number of frial. If the money left is not enough, he canot get a
- * mosquito.
- * The crazy money giver goto sleep when the ATM is full of money. The stealer
- * wake them up after stealing.
- *
- * It seems that a higher amount to steal may not be good if the guys have to
- * spend a lot od\f time to deposit money (the account is always empty)
- */
-
-/*
- * TODO:
- * allow different number of stealer and moneyguy
- */
-
 #include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
