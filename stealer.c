@@ -141,22 +141,31 @@ int main(int argc, char **argv)
 
 
         pthread_t steallist[stealer_num];
-        pthread_t mguylist[stealer_num];
-        int amountlist[stealer_num][2];
+        pthread_t mguylist[moneyguy_num];
+
+        /* steal_val[n][0] is money to steal each time. steal_val[n][1] is tatal
+         * stolen amount.
+         */
+        int steal_val[stealer_num][2];
+        int deposit_val[moneyguy_num];
         int ret;
         
         for (int i=0; i < stealer_num; i++){
-                amountlist[i][0] = i + 1;
-                ret = pthread_create(&steallist[i], NULL, stealer, &amountlist[i][0]);
+                steal_val[i][0] = i + 1;
+                ret = pthread_create(&steallist[i], NULL, stealer, &steal_val[i][0]);
                 check(ret, "pthread_create");
-                ret = pthread_create(&mguylist[i], NULL, moneyguy, &amountlist[i][0]);
+        }
+
+        for (int i=0; i < moneyguy_num; i++){
+                deposit_val[i] = i + 1;
+                ret = pthread_create(&mguylist[i], NULL, moneyguy, &deposit_val[i]);
                 check(ret, "pthread_create");
         }
 
         for (int i=0; i < stealer_num; i++){
                 int *stolen;
                 pthread_join(steallist[i], (void**) &stolen);
-                amountlist[i][1] = *stolen;
+                steal_val[i][1] = *stolen;
                 free(stolen);
                 check(ret, "pthread_join");
                 printf("joined stealer %d\n\n", i+1);
@@ -174,7 +183,7 @@ int main(int argc, char **argv)
               "========================\n\n",
               stdout);
 
-        for (int i=0; i < stealer_num; i++){
+        for (int i=0; i < moneyguy_num; i++){
                 pthread_cancel(mguylist[i]);
                 check(ret, "pthread_join");
         }
@@ -186,7 +195,7 @@ int main(int argc, char **argv)
 
         pthread_mutex_destroy(&acc1.mutex);
         for (int i=0; i < stealer_num; i++){
-                printf("stealer %d stolen %d\n", i+1, amountlist[i][1]);
+                printf("stealer %d stolen %d\n", i+1, steal_val[i][1]);
         }
 }
 

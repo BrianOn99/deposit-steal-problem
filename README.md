@@ -21,7 +21,7 @@ The crazy money giver goto sleep when the ATM is full of money. The stealer
 wake them up after stealing.
 
 It seems that a higher amount to steal may not be good if the guys have to
-spend a lot od\f time to deposit money (the account is always empty)
+spend a lot of time to deposit money (the account is always empty)
 
 You should get something like this in the end:
 
@@ -33,6 +33,8 @@ stealer 5 stolen 410
 
 TODO:
 =====
-allow different number of stealer and moneyguy
+1. allow different number of stealer and moneyguy (implemented 24/08/14)
+2. a "--quiet" option showing summary only
+3. a more fair competition
 
 
